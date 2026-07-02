@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MoodTrack</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#161616">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#161616;
+  --card:#212121;
+  --card2:#262626;
+  --border:#333;
+  --text:#f2f2f2;
+  --sub:#9a9a9a;
+  --accent:#3ecfba;
+  --accent2:#2fa896;
+  --rad:#cdd93c;
+  --good:#6dc96d;
+  --meh:#2fb0a8;
+  --bad:#5c7c99;
+  --awful:#8d6e75;
+  --none:#4d4d4d;
+  --danger:#e0605c;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;height:100%;overscroll-behavior:none;}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:480px;margin:0 auto;position:relative;background:var(--bg);}
+button{font-family:inherit;}
+input,textarea,select{font-family:inherit;}
+
+/* ---------- Top bar ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;}
+.topbar h1{font-size:18px;margin:0;font-weight:600;}
+.icon-btn{background:none;border:none;color:var(--text);font-size:20px;padding:6px;cursor:pointer;line-height:1;}
+
+/* ---------- Tabs content ---------- */
+.tab-content{flex:1;overflow-y:auto;padding:0 14px 90px;-webkit-overflow-scrolling:touch;}
+.tab-content.hidden{display:none;}
+
+/* ---------- Bottom nav ---------- */
+.bottomnav{position:absolute;bottom:0;left:0;right:0;display:flex;background:#1c1c1c;border-top:1px solid var(--border);padding:8px 6px calc(8px + env(safe-area-inset-bottom));}
+.navbtn{flex:1;background:none;border:none;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;padding:6px 0;cursor:pointer;}
+.navbtn.active{color:var(--accent);}
+.navbtn span.ic{font-size:20px;}
+
+/* ---------- Cards ---------- */
+.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px;}
+.card h2{font-size:15px;margin:0 0 12px;font-weight:600;}
+.row-between{display:flex;align-items:center;justify-content:space-between;}
+
+/* ---------- Mood picker ---------- */
+.mood-row{display:flex;justify-content:space-between;margin:10px 0 4px;}
+.mood-opt{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:var(--sub);flex:1;padding:4px 0;}
+.mood-opt .circ{width:46px;height:46px;border-radius:50%;background:var(--none);display:flex;align-items:center;justify-content:center;font-size:24px;border:2px solid transparent;transition:.15s;}
+.mood-opt.selected .circ{border-color:#fff;transform:scale(1.08);}
+.mood-opt.rad .circ{background:var(--rad);} .mood-opt.good .circ{background:var(--good);}
+.mood-opt.meh .circ{background:var(--meh);} .mood-opt.bad .circ{background:var(--bad);}
+.mood-opt.awful .circ{background:var(--awful);}
+.mood-opt small{font-size:11px;}
+
+/* ---------- Activities ---------- */
+.act-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px;}
+.act-chip{background:var(--card2);border:2px solid transparent;border-radius:12px;padding:10px 4px;text-align:center;cursor:pointer;color:var(--text);}
+.act-chip .ic{font-size:22px;display:block;}
+.act-chip small{font-size:10px;color:var(--sub);display:block;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.act-chip.selected{border-color:var(--accent);background:#1d3733;}
+.act-chip.add{color:var(--accent);}
+
+textarea#journalInput{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:12px;color:var(--text);padding:12px;font-size:14px;min-height:90px;resize:vertical;margin-top:10px;}
+
+.save-btn{width:100%;background:var(--accent);color:#0d0d0d;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;margin-top:14px;cursor:pointer;}
+.save-btn:disabled{opacity:.4;}
+
+/* ---------- Entries list ---------- */
+.entry{background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:10px;}
+.entry-head{display:flex;align-items:center;gap:10px;}
+.entry-mood-ic{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.entry-meta{flex:1;}
+.entry-date{font-size:13px;font-weight:600;}
+.entry-time{font-size:11px;color:var(--sub);}
+.entry-acts{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;}
+.entry-acts span{background:var(--card2);border-radius:8px;padding:3px 7px;font-size:11px;}
+.entry-journal{margin-top:8px;font-size:13px;color:#ddd;white-space:pre-wrap;}
+.entry-del{background:none;border:none;color:var(--sub);font-size:16px;cursor:pointer;padding:4px;}
+.empty-state{text-align:center;color:var(--sub);padding:60px 20px;font-size:14px;}
+
+/* ---------- Month calendar ---------- */
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cal-nav .icon-btn{font-size:16px;}
+.cal-nav .lbl{font-size:14px;font-weight:600;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;}
+.cal-dow{font-size:10px;color:var(--sub);padding-bottom:2px;}
+.cal-day{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;background:var(--card2);color:var(--sub);position:relative;}
+.cal-day.mood{color:#111;font-weight:700;}
+.cal-day.today{box-shadow:0 0 0 2px var(--accent);}
+.cal-day.blank{background:transparent;}
+.insight{background:#1d2f3a;color:#bfe3ff;border-radius:12px;padding:10px 12px;font-size:12.5px;margin-top:12px;display:flex;gap:8px;align-items:center;}
+
+/* ---------- Mood count gauge ---------- */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;margin:6px 0 8px;}
+.gauge-num{font-size:30px;font-weight:700;margin-top:-38px;}
+.legend-row{display:flex;justify-content:space-between;margin-top:10px;}
+.legend-item{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.legend-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;color:#111;font-weight:700;}
+.legend-item small{font-size:10px;color:var(--sub);}
+
+/* ---------- Weekly report ---------- */
+.week-toggle{display:flex;background:var(--card2);border-radius:20px;padding:3px;margin-bottom:14px;}
+.week-toggle button{flex:1;background:none;border:none;border-radius:18px;padding:8px 0;font-size:12px;color:var(--sub);cursor:pointer;}
+.week-toggle button.active{background:var(--accent2);color:#fff;}
+.avg-row{display:flex;justify-content:space-around;margin-bottom:16px;}
+.avg-box{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.avg-circ{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;}
+.avg-num{font-size:20px;font-weight:700;}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;}
+.bar-row .dlabel{width:32px;color:var(--sub);}
+.bar-track{flex:1;height:10px;background:var(--card2);border-radius:6px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:6px;}
+
+/* ---------- Menstrual calendar ---------- */
+.cal-day.period{background:#c0587a;color:#fff;}
+.cal-day.predicted{background:transparent;border:2px dashed #c0587a;color:#e6a9bd;}
+.cyc-log-btn{margin-top:12px;width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px;font-size:13px;cursor:pointer;}
+.cyc-history{margin-top:12px;}
+.cyc-history-item{display:flex;justify-content:space-between;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--border);color:var(--sub);}
+.next-pred-box{background:#2a1c22;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12.5px;color:#e6a9bd;}
+
+/* ---------- Settings ---------- */
+.set-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);}
+.set-item:last-child{border-bottom:none;}
+.set-label{font-size:14px;}
+.set-sub{font-size:11px;color:var(--sub);margin-top:2px;}
+.set-input{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:14px;width:90px;text-align:center;}
+.switch{position:relative;width:44px;height:26px;background:var(--card2);border-radius:14px;cursor:pointer;border:1px solid var(--border);}
+.switch.on{background:var(--accent2);}
+.switch .knob{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s;}
+.switch.on .knob{left:20px;}
+.text-btn{background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;}
+.danger-btn{background:none;border:none;color:var(--danger);font-size:14px;cursor:pointer;}
+
+/* ---------- Overlays: lock / login / modal ---------- */
+.overlay{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;z-index:50;}
+.overlay.hidden{display:none;}
+.pin-dots{display:flex;gap:16px;margin:24px 0;}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:var(--card2);border:1px solid var(--border);}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent);}
+.pin-pad{display:grid;grid-template-columns:repeat(3,64px);gap:14px;}
+.pin-pad button{width:64px;height:64px;border-radius:50%;background:var(--card2);border:1px solid var(--border);color:var(--text);font-size:20px;}
+.pin-pad button.del{background:none;border:none;font-size:14px;color:var(--sub);}
+.login-box{width:100%;max-width:320px;}
+.login-box input{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;font-size:14px;margin-bottom:10px;}
+.login-box button{width:100%;background:var(--accent);color:#0d0d0d;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;margin-top:4px;cursor:pointer;}
+.login-err{color:var(--danger);font-size:12px;min-height:16px;margin-top:6px;}
+
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;z-index:60;}
+.modal-bg.hidden{display:none;}
+.modal-box{width:100%;max-width:480px;margin:0 auto;background:var(--card);border-radius:20px 20px 0 0;padding:20px;max-height:85vh;overflow-y:auto;}
+.modal-box h3{margin:0 0 14px;font-size:16px;}
+.emoji-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;max-height:180px;overflow-y:auto;}
+.emoji-grid button{background:var(--card2);border:2px solid transparent;border-radius:10px;font-size:20px;padding:8px 0;}
+.emoji-grid button.picked{border-color:var(--accent);}
+.modal-box input[type=text]{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px;font-size:14px;margin-bottom:12px;}
+.modal-box .save-btn{margin-top:0;}
+.close-x{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--sub);font-size:18px;}
+
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#2a2a2a;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;z-index:80;opacity:0;transition:.25s;pointer-events:none;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= LOGIN OVERLAY ================= -->
+  <div id="loginOverlay" class="overlay hidden">
+    <div class="login-box">
+      <h2 style="text-align:center;margin-bottom:4px;">MoodTrack</h2>
+      <p style="text-align:center;color:var(--sub);font-size:12.5px;margin-bottom:20px;">Sign in to sync your entries</p>
+      <input type="email" id="loginEmail" placeholder="Email">
+      <input type="password" id="loginPass" placeholder="Password">
+      <button id="loginBtn">Sign In</button>
+      <button id="signupBtn" style="background:none;color:var(--accent);border:1px solid var(--border);margin-top:8px;">Create Account</button>
+      <div class="login-err" id="loginErr"></div>
+    </div>
+  </div>
+
+  <!-- ================= PIN LOCK OVERLAY ================= -->
+  <div id="lockOverlay" class="overlay hidden">
+    <div style="font-size:34px;margin-bottom:4px;" id="lockTitleIcon">🔒</div>
+    <div style="font-size:14px;color:var(--sub);" id="lockLabel">Enter PIN</div>
+    <div class="pin-dots" id="pinDots"></div>
+    <div class="pin-pad" id="pinPad"></div>
+    <div class="login-err" id="pinErr"></div>
+  </div>
+
+  <!-- ================= TOP BAR ================= -->
+  <div class="topbar">
+    <h1 id="topTitle">MoodTrack</h1>
+    <button class="icon-btn" id="lockNowBtn" title="Lock">🔒</button>
+  </div>
+
+  <!-- ================= TAB 1: ENTRIES ================= -->
+  <div class="tab-content" id="tabEntries">
+    <div id="entriesList"></div>
+  </div>
+
+  <!-- ================= TAB 2: LOG & REPORTS ================= -->
+  <div class="tab-content hidden" id="tabLog">
+
+    <!-- New entry -->
+    <div class="card">
+      <h2>How are you feeling?</h2>
+      <div class="mood-row" id="moodRow"></div>
+      <h2 style="margin-top:16px;">Activities</h2>
+      <div class="act-grid" id="actGrid"></div>
+      <textarea id="journalInput" placeholder="Write about your day..."></textarea>
+      <button class="save-btn" id="saveEntryBtn" disabled>Save Entry</button>
+    </div>
+
+    <!-- Monthly calendar / mood report -->
+    <div class="card">
+      <h2>Monthly Mood</h2>
+      <div class="cal-nav">
+        <button class="icon-btn" id="moMonthPrev">‹</button>
+        <div class="lbl" id="moMonthLbl"></div>
+        <button class="icon-btn" id="moMonthNext">›</button>
+      </div>
+      <div class="cal-grid" id="moMonthGrid"></div>
+      <div class="insight" id="moInsight">😊 This month your best day is —</div>
+      <h2 style="margin-top:18px;">Mood Count</h2>
+      <div class="gauge-wrap">
+        <svg id="gaugeSvg" width="200" height="110" viewBox="0 0 200 110"></svg>
+        <div class="gauge-num" id="gaugeNum">0</div>
+      </div>
+      <div class="legend-row" id="legendRow"></div>
+    </div>
+
+    <!-- Weekly report -->
+    <div class="card">
+      <h2>Weekly Reports</h2>
+      <div class="cal-nav">
+        <button class="icon-btn" id="wkPrev">‹</button>
+        <div class="lbl" id="wkLbl"></div>
+        <button class="icon-btn" id="wkNext">›</button>
+      </div>
+      <div class="avg-row" id="avgRow"></div>
+      <div id="barRows"></div>
+      <h2 style="margin-top:18px;">Weekly Mood Chart</h2>
+      <canvas id="wkChart" height="180"></canvas>
+    </div>
+
+    <!-- Menstrual cycle calendar -->
+    <div class="card">
+      <h2>Menstrual Cycle</h2>
+      <div class="cal-nav">
+        <button class="icon-btn" id="cyMonthPrev">‹</button>
+        <div class="lbl" id="cyMonthLbl"></div>
+        <button class="icon-btn" id="cyMonthNext">›</button>
+      </div>
+      <div class="cal-grid" id="cyMonthGrid"></div>
+      <div class="next-pred-box" id="nextPredBox"></div>
+      <button class="cyc-log-btn" id="logPeriodBtn">+ Log Period</button>
+      <div class="cyc-history" id="cycHistory"></div>
+    </div>
+
+  </div>
+
+  <!-- ================= TAB 3: SETTINGS ================= -->
+  <div class="tab-content hidden" id="tabSettings">
+    <div class="card">
+      <h2>Security</h2>
+      <div class="set-item">
+        <div><div class="set-label">App PIN Lock</div><div class="set-sub">Lock the app when opened</div></div>
+        <div class="switch" id="pinToggle"><div class="knob"></div></div>
+      </div>
+      <div class="set-item">
+        <div class="set-label">Change PIN</div>
+        <button class="text-btn" id="changePinBtn">Set / Change</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Reminders</h2>
+      <div class="set-item">
+        <div><div class="set-label">Daily Reminder</div><div class="set-sub">Best-effort: fires while the app is open or recently backgrounded. May not fire if fully closed for a long time — open the app and it will catch up.</div></div>
+        <div class="switch" id="remToggle"><div class="knob"></div></div>
+      </div>
+      <div class="set-item">
+        <div class="set-label">Reminder Time</div>
+        <input type="time" class="set-input" id="remTime" style="width:110px;">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Menstrual Cycle Settings</h2>
+      <div class="set-item">
+        <div class="set-label">Average Cycle Length</div>
+        <input type="number" class="set-input" id="cycleLenInput" min="15" max="60"> 
+      </div>
+      <div class="set-item">
+        <div class="set-label">Average Period Length</div>
+        <input type="number" class="set-input" id="periodLenInput" min="1" max="14">
+      </div>
+      <div class="set-item">
+        <div><div class="set-label">Predicted Next Cycle</div><div class="set-sub" id="predictedDateSub">—</div></div>
+      </div>
+      <div class="set-item">
+        <div class="set-label">Override Next Date</div>
+        <input type="date" class="set-input" id="overrideDateInput" style="width:150px;">
+      </div>
+      <button class="text-btn" id="saveCycleSettingsBtn" style="margin-top:8px;">Save Cycle Settings</button>
+    </div>
+
+    <div class="card">
+      <h2>Account</h2>
+      <div class="set-item">
+        <div class="set-label" id="acctEmailLbl">—</div>
+        <button class="danger-btn" id="signOutBtn">Sign Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM NAV ================= -->
+  <div class="bottomnav">
+    <button class="navbtn active" data-tab="tabEntries"><span class="ic">📜</span>Entries</button>
+    <button class="navbtn" data-tab="tabLog"><span class="ic">➕</span>Log</button>
+    <button class="navbtn" data-tab="tabSettings"><span class="ic">⚙️</span>Settings</button>
+  </div>
+</div>
+
+<!-- ================= ADD ACTIVITY MODAL ================= -->
+<div class="modal-bg hidden" id="addActModalBg">
+  <div class="modal-box" style="position:relative;">
+    <button class="close-x" id="closeAddActModal">✕</button>
+    <h3>New Activity</h3>
+    <div class="emoji-grid" id="actEmojiGrid"></div>
+    <input type="text" id="actLabelInput" placeholder="Label (e.g. Gym)">
+    <button class="save-btn" id="saveActBtn">Add Activity</button>
+  </div>
+</div>
+
+<!-- ================= LOG PERIOD MODAL ================= -->
+<div class="modal-bg hidden" id="periodModalBg">
+  <div class="modal-box" style="position:relative;">
+    <button class="close-x" id="closePeriodModal">✕</button>
+    <h3>Log Period</h3>
+    <label style="font-size:12px;color:var(--sub);">Start date</label>
+    <input type="date" id="periodStartInput" style="width:100%;margin:6px 0 12px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px;">
+    <label style="font-size:12px;color:var(--sub);">End date (optional)</label>
+    <input type="date" id="periodEndInput" style="width:100%;margin:6px 0 12px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px;">
+    <button class="save-btn" id="savePeriodBtn">Save Period</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
