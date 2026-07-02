@@ -106,7 +106,7 @@ document.getElementById('signupBtn').onclick = () => {
   });
 };
 document.getElementById('signOutBtn').onclick = () => {
-  sessionStorage.removeItem('mt_unlocked');
+  appUnlocked = false;
   auth.signOut();
 };
 
@@ -124,7 +124,7 @@ function attachListeners(uid){
     }
     applySettingsToUI();
     maybeShowLock();
-  });
+  }, err => { console.error('settings listener error:', err); toast('Settings sync error - check console (F12)'); });
 
   userRef.collection('entries').orderBy('date').orderBy('time').onSnapshot(snap => {
     entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -132,29 +132,43 @@ function attachListeners(uid){
     renderMonthCalendar();
     renderGauge();
     renderWeekReport();
-  });
+  }, err => { console.error('entries listener error:', err); toast('Entries sync error - check console (F12)'); });
 
   userRef.collection('activities').orderBy('createdAt').onSnapshot(snap => {
     const custom = snap.docs.map(d => ({ id: d.id, ...d.data(), custom:true }));
     activities = [...DEFAULT_ACTIVITIES, ...custom];
     renderActGrid();
-  });
+  }, err => { console.error('activities listener error:', err); toast('Activities sync error - check console (F12)'); });
 
   userRef.collection('cycles').orderBy('start').onSnapshot(snap => {
     cycles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderMenstrualCalendar();
-  });
+  }, err => { console.error('cycles listener error:', err); toast('Cycles sync error - check console (F12)'); });
 }
 function userRef(){ return db.collection('users').doc(currentUser.uid); }
 
 // ============================================================
 // PIN LOCK
 // ============================================================
+let appUnlocked = false; // resets to false every time this script freshly loads (i.e. app truly reopened)
 function maybeShowLock(){
-  if (settings.pinEnabled && settings.pinHash && sessionStorage.getItem('mt_unlocked') !== '1') {
+  if (settings.pinEnabled && settings.pinHash && !appUnlocked) {
     openLock('verify');
   }
 }
+// Re-lock if the app has been backgrounded/hidden for more than 60 seconds
+let hiddenAt = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now();
+  } else if (document.visibilityState === 'visible') {
+    if (hiddenAt && (Date.now() - hiddenAt > 60000) && settings.pinEnabled && settings.pinHash) {
+      appUnlocked = false;
+      openLock('verify');
+    }
+    hiddenAt = null;
+  }
+});
 function openLock(mode){
   pinMode = mode; pinBuffer = ''; pinFirstEntry = '';
   document.getElementById('lockLabel').textContent =
@@ -189,7 +203,7 @@ async function onPinDigit(d){
     if (pinMode === 'verify') {
       const hash = await sha256(pinBuffer);
       if (hash === settings.pinHash) {
-        sessionStorage.setItem('mt_unlocked','1');
+        appUnlocked = true;
         document.getElementById('lockOverlay').classList.add('hidden');
       } else {
         document.getElementById('pinErr').textContent = 'Incorrect PIN, try again.';
@@ -204,7 +218,7 @@ async function onPinDigit(d){
       if (pinBuffer === pinFirstEntry) {
         const hash = await sha256(pinBuffer);
         await userRef().collection('settings').doc('config').set({ pinHash: hash, pinEnabled: true }, { merge:true });
-        sessionStorage.setItem('mt_unlocked','1');
+        appUnlocked = true;
         document.getElementById('lockOverlay').classList.add('hidden');
         toast('PIN set ✓');
       } else {
@@ -216,7 +230,7 @@ async function onPinDigit(d){
 }
 document.getElementById('lockNowBtn').onclick = () => {
   if (!settings.pinHash) { toast('No PIN set yet — go to Settings to add one.'); return; }
-  sessionStorage.removeItem('mt_unlocked');
+  appUnlocked = false;
   openLock('verify');
 };
 document.getElementById('changePinBtn').onclick = () => openLock('setNew');
